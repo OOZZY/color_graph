@@ -95,7 +95,9 @@ class Problem(object):
 
         return len(self.remaining_colors(assignment, vertex))
 
-    def degree(self, assignment, vertex):
+    # Returns the number of constraints where vertex is involved with an
+    # unassigned vertex.
+    def num_vertex_constraints(self, assignment, vertex):
         assert vertexes(assignment).issubset(self.vertexes())
         unassigned_vertexes = self.unassigned_vertexes(assignment)
         assert vertex in unassigned_vertexes
@@ -124,22 +126,22 @@ class Problem(object):
 
         return vertexes_to_return
 
-    def vertexes_with_highest_degree(self, assignment, vertex_set):
+    def vertexes_with_maximum_vertex_constraints(self, assignment, vertex_set):
         assert vertexes(assignment).issubset(self.vertexes())
         unassigned_vertexes = self.unassigned_vertexes(assignment)
         assert vertex_set.issubset(unassigned_vertexes)
 
         first = next(iter(vertex_set))
-        highest_degree = self.degree(assignment, first)
+        maximum_vertex_constraints = self.num_vertex_constraints(assignment, first)
         vertexes_to_return = set([first])
 
         for vertex in vertex_set:
-            degree = self.degree(assignment, vertex)
+            num_vertex_constraints = self.num_vertex_constraints(assignment, vertex)
 
-            if degree > highest_degree:
-                highest_degree = degree
+            if num_vertex_constraints > maximum_vertex_constraints:
+                maximum_vertex_constraints = num_vertex_constraints
                 vertexes_to_return = set([vertex])
-            elif degree == highest_degree:
+            elif num_vertex_constraints == maximum_vertex_constraints:
                 vertexes_to_return.add(vertex)
 
         return vertexes_to_return
@@ -150,38 +152,91 @@ class Problem(object):
         unassigned_vertexes = self.unassigned_vertexes(assignment)
         unassigned_vertexes = self.vertexes_with_minimum_remaining_colors(
             assignment, unassigned_vertexes)
-        unassigned_vertexes = self.vertexes_with_highest_degree(
+        unassigned_vertexes = self.vertexes_with_maximum_vertex_constraints(
             assignment, unassigned_vertexes)
         return next(iter(unassigned_vertexes))
 
-def recursive_backtracking_search(assignment, problem):
-    if problem.assignment_is_complete(assignment):
-        return assignment
+    # Returns the total number of assignments that would be ruled out if
+    # vertex=color was added to assignment.
+    def num_color_constraints(self, assignment, vertex, color):
+        assert vertexes(assignment).issubset(self.vertexes())
+        unassigned_vertexes = self.unassigned_vertexes(assignment)
+        assert vertex in unassigned_vertexes
+        assert color in self.remaining_colors(assignment, vertex)
 
-    # vertex = problem.choose_unassigned_vertex_without_heuristic(assignment)
-    vertex = problem.choose_unassigned_vertex_with_heuristic(assignment)
+        adjacent_vertexes = self.graph[vertex]
+        unassigned_adjacent_vertexes = adjacent_vertexes - vertexes(assignment)
 
-    # colors = problem.colors()
-    colors = problem.remaining_colors(assignment, vertex)
+        # Create new assignment that includes vertex=color
+        new_assignment = dict(assignment)
+        new_assignment[vertex] = color
+        num_constraints = 0
 
-    for color in colors:
-        assignment[vertex] = color
-        if problem.assignment_is_consistent(assignment):
-            result = recursive_backtracking_search(assignment, problem)
-            if result == None:
-                del assignment[vertex]
-            else:
-                return result
+        for adjacent_vertex in unassigned_adjacent_vertexes:
+            num_remaining_colors = self.num_remaining_colors(assignment, adjacent_vertex)
+            new_num_remaining_colors = self.num_remaining_colors(new_assignment, adjacent_vertex)
+            num_constraints += num_remaining_colors - new_num_remaining_colors
 
-    return None
+        return num_constraints
 
-def backtracking_search(problem):
-    return recursive_backtracking_search({}, problem)
+    def colors_with_minimum_color_constraints(self, assignment, vertex):
+        assert vertexes(assignment).issubset(self.vertexes())
+        unassigned_vertexes = self.unassigned_vertexes(assignment)
+        assert vertex in unassigned_vertexes
+
+        remaining_colors = self.remaining_colors(assignment, vertex)
+
+        if not remaining_colors:
+            return set()
+
+        first = next(iter(remaining_colors))
+        minimum_color_constraints = self.num_color_constraints(assignment, vertex, first)
+        colors_to_return = set([first])
+
+        for color in remaining_colors:
+            num_color_constraints = self.num_color_constraints(assignment, vertex, color)
+
+            if num_color_constraints < minimum_color_constraints:
+                minimum_color_constraints = num_color_constraints
+                colors_to_return = set([color])
+            elif num_color_constraints == minimum_color_constraints:
+                colors_to_return.add(color)
+
+        return colors_to_return
+
+    def recursive_backtracking_search(self, assignment):
+        if self.assignment_is_complete(assignment):
+            return assignment
+
+        # vertex = self.choose_unassigned_vertex_without_heuristic(assignment)
+        vertex = self.choose_unassigned_vertex_with_heuristic(assignment)
+
+        # colors = self.colors()
+        # colors = self.remaining_colors(assignment, vertex)
+        colors = self.colors_with_minimum_color_constraints(assignment, vertex)
+
+        print("chosen vertex:", vertex)
+        print("chosen colors:", colors)
+
+        for color in colors:
+            print(vertex, "=", color)
+            assignment[vertex] = color
+            if self.assignment_is_consistent(assignment):
+                result = self.recursive_backtracking_search(assignment)
+                if result == None:
+                    del assignment[vertex]
+                else:
+                    return result
+
+        return None
+
+    def backtracking_search(self):
+        return self.recursive_backtracking_search({})
 
 text = sys.stdin.read()
 num_vertexes, num_colors, graph = parse_text(text)
 problem = Problem(num_vertexes, num_colors, graph)
-solution = backtracking_search(problem)
+solution = problem.backtracking_search()
 
 print("num_vertexes:", problem.num_vertexes)
 print("num_colors:", problem.num_colors)
